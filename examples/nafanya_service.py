@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3self.write_event
 """Controls the LEDs on the MTS Marvin Speaker."""
 import argparse
 import asyncio
@@ -107,6 +107,10 @@ class LEDsEventHandler(AsyncEventHandler):
             self.color(_WHITE)
         elif RunSatellite.is_type(event.type):
             self.color(_WHITE)
+            mutemic = MuteMic().event()
+            await self.write_event(mutemic)
+            setvolume = SetVolume().event()
+            await self.write_event(setvolume)
 
         return True
 

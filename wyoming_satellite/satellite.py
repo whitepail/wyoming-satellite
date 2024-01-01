@@ -15,7 +15,7 @@ from wyoming.error import Error
 from wyoming.event import Event, async_write_event
 from wyoming.mic import MicProcessAsyncClient
 from wyoming.pipeline import PipelineStage, RunPipeline
-from wyoming.satellite import RunSatellite, StreamingStarted, StreamingStopped, SetVolume, MuteMic
+from wyoming.satellite import RunSatellite, StreamingStarted, StreamingStopped, SetVolume, MuteMic, VolumeAdjusted, MicMuted
 from wyoming.snd import SndProcessAsyncClient
 from wyoming.tts import Synthesize
 from wyoming.vad import VoiceStarted, VoiceStopped
@@ -197,13 +197,11 @@ class SatelliteBase:
         elif MuteMic.is_type(event.type):
             # Mic Mute request
             _LOGGER.debug(event)
-            await self.trigger_mic_mute(MuteMic.from_event(event))
+            await self.trigger_mute_mic(MuteMic.from_event(event))
         elif SetVolume.is_type(event.type):
             # Volume set request
             _LOGGER.debug(event)
-            await self.trigger_volume_set(VolumeSet.from_event(event))
-
-
+            await self.trigger_volume_set(SetVolume.from_event(event))
         # Forward everything except audio to event service
         if not AudioChunk.is_type(event.type):
             await self.forward_event(event)
@@ -671,16 +669,23 @@ class SatelliteBase:
     async def trigger_volume_set(self, setvolume: SetVolume) -> None:
         """Called when volume set is received."""
         result = await run_event_command_with_result(self.settings.event.setvolume, setvolume.volume)
-        _LOGGER.warning("SetVolume return result %s",result)
+        _LOGGER.debug("SetVolume return result %s",result)
+        volumemsg = VolumeAdjusted(volume=result.rstrip()).event()
+        await self.event_to_server(volumemsg)
+        await self.forward_event(volumemsg)
+
 
     async def trigger_mute_mic(self, mutemic: MuteMic) -> None:
         """Called when mute mic is received."""
         result = await run_event_command_with_result(self.settings.event.mutemic, mutemic.mute)
-        _LOGGER.warning("MuteMic return result %s",result)
+        _LOGGER.debug("MuteMic return result %s",result)
+        micmsg = MicMuted(mute=result.rstrip().lower()).event()
+        await self.event_to_server(micmsg)
+        await self.forward_event(micmsg)
 
     async def receive_event(self, event: Event) -> None:
         """Called when an event is received from the event service."""
-        self.event_from_server(Event)
+        await self.event_from_server(event)
 
     async def forward_event(self, event: Event) -> None:
         """Forward an event to the event service."""
@@ -713,8 +718,6 @@ class SatelliteBase:
                 if self._event_queue is None:
                     self._event_queue = asyncio.Queue()
 
-#                event = await self._event_queue.get()
-
                 if event_client is None:
                     event_client = self._make_event_client()
                     assert event_client is not None
@@ -725,13 +728,17 @@ class SatelliteBase:
                     from_client_task = None
                     to_client_task = None
                     pending = set()
-#                    self._event_queue = asyncio.Queue()
 
                 # Read/write in "parallel"
                 if to_client_task is None:
                     # From satellite to event service
                     to_client_task = asyncio.create_task(self._event_queue.get())
                     pending.add(to_client_task)
+
+                if from_client_task is None:
+                    # From wake service to satellite
+                    from_client_task = asyncio.create_task(event_client.read_event())
+                    pending.add(from_client_task)
 
                 done, pending = await asyncio.wait(
                     pending, return_when=asyncio.FIRST_COMPLETED
@@ -759,7 +766,6 @@ class SatelliteBase:
 
                     await self.receive_event(event)
 
-#                await event_client.write_event(event)
             except asyncio.CancelledError:
                 break
             except Exception:

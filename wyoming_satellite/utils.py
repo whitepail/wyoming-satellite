@@ -135,19 +135,12 @@ async def run_event_command_with_result(
     if command_input:
         stdout, stderr = await proc.communicate(input=command_input.encode("utf-8"))
         if stdout:
-            print(f'[stdout]\n{stdout.decode()}')
             return stdout.decode()
-        if stderr:
-            print(f'[stderr]\n{stderr.decode()}')
     else:
         proc.stdin.close()
         stdout, stderr = await proc.communicate()
         if stdout:
-            print(f'[stdout]\n{stdout.decode()}')
             return stdout.decode()
-        if stderr:
-            print(f'[stderr]\n{stderr.decode()}')
-#        await proc.wait()
 
 
 def wav_to_events(
