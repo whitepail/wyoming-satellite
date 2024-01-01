@@ -87,6 +87,7 @@ class LEDsEventHandler(AsyncEventHandler):
         self.cli_args = cli_args
         self.client_id = str(time.monotonic_ns())
         self.leds = leds
+        self.restore_task = None
 
         _LOGGER.debug("Client connected: %s", self.client_id)
 
@@ -111,7 +112,8 @@ class LEDsEventHandler(AsyncEventHandler):
             await self.write_event(mutemic)
             setvolume = SetVolume().event()
             await self.write_event(setvolume)
-
+        elif VolumeAdjusted.is_type(event.type):
+            self.volume(_RED,int(VolumeAdjusted.from_event(event).volume))
         return True
 
     def color(self, rgb: Tuple[int, int, int]) -> None:
@@ -119,6 +121,22 @@ class LEDsEventHandler(AsyncEventHandler):
             self.leds.set_pixel(i, rgb[0], rgb[1], rgb[2])
 
         self.leds.show()
+
+    def volume(self, rgb: Tuple[int, int, int], volume: int) -> None:
+
+        for i in range(NUM_LEDS):
+            self.leds.set_pixel(i, 0, 0, 0, 100, True)
+
+        for i in range(int(NUM_LEDS*volume/100)):
+            self.leds.set_pixel(i, rgb[0], rgb[1], rgb[2], 100, True)
+
+        self.leds.show(True)
+
+        if self.restore_task is not None:
+            self.restore_task.cancel()
+
+        loop = asyncio.get_event_loop()
+        self.restore_task = loop.call_later(2, self.leds.show)
 
 
 
@@ -150,8 +168,9 @@ class ISSI:
             self.global_brightness = global_brightness
 
         self.leds = [self.LED_START, 0, 0, 0] * self.num_led  # Pixel buffer
+        self.leds_temp = [self.LED_START, 0, 0, 0] * self.num_led  # Pixel buffer
 
-    def set_pixel(self, led_num, red, green, blue, bright_percent=100):
+    def set_pixel(self, led_num, red, green, blue, bright_percent=100, temp=False):
         """Sets the color of one pixel in the LED stripe.
 
         The changed pixel is not shown yet on the Stripe, it is only
@@ -168,13 +187,19 @@ class ISSI:
         # as we expect some brightness unless set to 0
         brightness = int(ceil(bright_percent * self.global_brightness / 100.0))
         start_index = 4 * led_num
-        self.leds[start_index] = self.LED_START
-        self.leds[start_index + self.rgb[0]] = red
-        self.leds[start_index + self.rgb[1]] = green
-        self.leds[start_index + self.rgb[2]] = blue
+        if temp:
+            self.leds_temp[start_index] = self.LED_START
+            self.leds_temp[start_index + self.rgb[0]] = red
+            self.leds_temp[start_index + self.rgb[1]] = green
+            self.leds_temp[start_index + self.rgb[2]] = blue
+        else:
+            self.leds[start_index] = self.LED_START
+            self.leds[start_index + self.rgb[0]] = red
+            self.leds[start_index + self.rgb[1]] = green
+            self.leds[start_index + self.rgb[2]] = blue
 
 
-    def set_pixel_rgb(self, led_num, rgb_color, bright_percent=100):
+    def set_pixel_rgb(self, led_num, rgb_color, bright_percent=100, temp=False):
         """Sets the color of one pixel in the LED stripe.
 
         The changed pixel is not shown yet on the Stripe, it is only
@@ -188,6 +213,7 @@ class ISSI:
             (rgb_color & 0x00FF00) >> 8,
             rgb_color & 0x0000FF,
             bright_percent,
+            temp,
         )
 
     def rotate(self, positions=1):
@@ -200,19 +226,28 @@ class ISSI:
         cutoff = 4 * (positions % self.num_led)
         self.leds = self.leds[cutoff:] + self.leds[:cutoff]
 
-    def show(self):
+    def show(self, temp=False):
         """Sends the content of the pixel buffer to the strip."""
 
         for led_num in range(self.num_led):
           start_index = 4 * led_num
           f = open(f'/sys/class/leds/rgb{led_num:02}_red/brightness', "w")
-          f.write(str(self.leds[start_index + self.rgb[0]]))
+          if temp:
+              f.write(str(self.leds_temp[start_index + self.rgb[0]]))
+          else:
+              f.write(str(self.leds[start_index + self.rgb[0]]))
           f.close()
           f = open(f'/sys/class/leds/rgb{led_num:02}_green/brightness', "w")
-          f.write(str(self.leds[start_index + self.rgb[1]]))
+          if temp:
+              f.write(str(self.leds_temp[start_index + self.rgb[1]]))
+          else:
+              f.write(str(self.leds[start_index + self.rgb[1]]))
           f.close()
           f = open(f'/sys/class/leds/rgb{led_num:02}_blue/brightness', "w")
-          f.write(str(self.leds[start_index + self.rgb[2]]))
+          if temp:
+              f.write(str(self.leds_temp[start_index + self.rgb[2]]))
+          else:
+              f.write(str(self.leds[start_index + self.rgb[2]]))
           f.close()
 
 
