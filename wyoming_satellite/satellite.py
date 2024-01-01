@@ -674,11 +674,13 @@ class SatelliteBase:
 
     async def trigger_volume_set(self, setvolume: SetVolume) -> None:
         """Called when volume set is received."""
-        await run_event_command(self.settings.event.setvolume, setvolume.volume)
+        result = await run_event_command_with_result(self.settings.event.setvolume, setvolume.volume)
+        _LOGGER.warning("SetVolume return result %s",result)
 
     async def trigger_mute_mic(self, mutemic: MuteMic) -> None:
         """Called when mute mic is received."""
-        await run_event_command(self.settings.event.mutemic, mutemic.mute)
+        result = await run_event_command_with_result(self.settings.event.mutemic, mutemic.mute)
+        _LOGGER.warning("MuteMic return result %s",result)
 
 
     def _make_event_client(self) -> Optional[AsyncClient]:

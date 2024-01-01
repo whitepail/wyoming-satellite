@@ -118,6 +118,37 @@ async def run_event_command(
         proc.stdin.close()
         await proc.wait()
 
+async def run_event_command_with_result(
+    command: Optional[List[str]], command_input: Optional[str] = None
+) -> None:
+    """Run a custom event command with optional input."""
+    if not command:
+        return
+
+    _LOGGER.debug("Running %s", command)
+    program, *program_args = command
+    proc = await asyncio.create_subprocess_exec(
+        program, *program_args, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+    )
+    assert proc.stdin is not None
+
+    if command_input:
+        stdout, stderr = await proc.communicate(input=command_input.encode("utf-8"))
+        if stdout:
+            print(f'[stdout]\n{stdout.decode()}')
+            return stdout.decode()
+        if stderr:
+            print(f'[stderr]\n{stderr.decode()}')
+    else:
+        proc.stdin.close()
+        stdout, stderr = await proc.communicate()
+        if stdout:
+            print(f'[stdout]\n{stdout.decode()}')
+            return stdout.decode()
+        if stderr:
+            print(f'[stderr]\n{stderr.decode()}')
+#        await proc.wait()
+
 
 def wav_to_events(
     wav_path: Union[str, Path],
