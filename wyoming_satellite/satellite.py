@@ -15,14 +15,14 @@ from wyoming.error import Error
 from wyoming.event import Event, async_write_event
 from wyoming.mic import MicProcessAsyncClient
 from wyoming.pipeline import PipelineStage, RunPipeline
-from wyoming.satellite import RunSatellite, StreamingStarted, StreamingStopped
+from wyoming.satellite import RunSatellite, StreamingStarted, StreamingStopped, SetVolume, MuteMic
 from wyoming.snd import SndProcessAsyncClient
 from wyoming.tts import Synthesize
 from wyoming.vad import VoiceStarted, VoiceStopped
 from wyoming.wake import Detect, Detection, WakeProcessAsyncClient
 
 from .settings import SatelliteSettings
-from .utils import multiply_volume, run_event_command, wav_to_events
+from .utils import multiply_volume, run_event_command, wav_to_events, run_event_command_with_result
 from .vad import SileroVad
 from .webrtc import WebRtcAudio
 
